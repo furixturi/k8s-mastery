@@ -128,3 +128,50 @@ https://zetcode.com/golang/getpostrequest/
 https://semaphoreci.com/community/tutorials/building-and-testing-a-rest-api-in-go-with-gorilla-mux-and-postgresql
 
 
+# Step 2 dockerize
+## sa-frontend
+### Option 1 - build locally and only use nginx docker
+
+The Nginx Docker image has the following default which is different from the local version:
+- web doc root is `/usr/share/nginx/html`
+- default port listening at is `80`
+
+#### To build the image:
+```
+$ docker build -f Dockerfile -t $DOCKER_USERNAME/sentiment-analysis-frontend .
+```
+### Option 2 - multi-stage 
+https://medium.com/geekculture/dockerizing-a-react-application-with-multi-stage-docker-build-4a5c6ca68166
+
+### To run the image just built:
+```
+$ docker run --name sa-frontend -p 8081:80 -d alabebop/sentiment-analysis-frontend:latest
+```
+
+### Use ARG to build with dynamic backend url
+
+- Add ARG and ENV in Dockerfile
+```
+ARG SA_WEBAPP_URL
+ARG SA_WEBAPP_PORT
+
+ENV REACT_APP_BE_SERVICE_URL=$SA_WEBAPP_URL
+ENV REACT_APP_BE_SERVICE_PORT=$SA_WEBAPP_PORT
+```
+- Use `--build-arg` when build image
+
+```
+$ docker build -f Dockerfile -t $DOCKER_USERNAME/sentiment-analysis-frontend-multistage --build-arg SA_WEBAPP_URL=http://localhost --build-arg SA_WEBAPP_PORT=8080 .
+```
+### To push it to docker hub
+```
+$ docker push alabebop/sentiment-analysis-frontend
+```
+
+## sa-webapp-go
+### build golang image
+- The `golang:alpine` image doesn't include git so `go mod download` won't work out of the box. Two options:
+  1. use `RUN apk update && apk upgrade && \
+    apk add --no-cache bash git openssh` to add git & co., or
+  2. use multi stage to build a much smaller image (didn't work as the `go mod download` stage fail to find a dependency)
+https://github.com/docker-library/golang/issues/209
