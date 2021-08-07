@@ -23,6 +23,10 @@ RUN apk --no-cache add ca-certificates bash
 
 WORKDIR /root/
 
+ENV SA_LOGIC_URL=http://localhost
+ENV SA_LOGIC_PORT=5000
+ENV SA_WEBAPP_PORT=8080
+
 # copy the pre-build binary from the previous stage
 COPY --from=builder /app/sa-webapp-go .
 
