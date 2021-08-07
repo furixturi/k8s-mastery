@@ -170,8 +170,13 @@ $ docker push alabebop/sentiment-analysis-frontend
 
 ## sa-webapp-go
 ### build golang image
-- The `golang:alpine` image doesn't include git so `go mod download` won't work out of the box. Two options:
+- The `golang:alpine` image doesn't include git so `go mod download` won't work out of the box. https://github.com/docker-library/golang/issues/209 
+Two options:
   1. use `RUN apk update && apk upgrade && \
     apk add --no-cache bash git openssh` to add git & co., or
-  2. use multi stage to build a much smaller image (didn't work as the `go mod download` stage fail to find a dependency)
-https://github.com/docker-library/golang/issues/209
+  2. use multi stage to build a much smaller image
+     1. can't name the runtime stage
+     2. build go executable without CGO (https://stackoverflow.com/questions/62632340/golang-linux-docker-error-standard-init-linux-go211-no-such-file-or-dir)
+```
+CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-extldflags "-static"' .
+```

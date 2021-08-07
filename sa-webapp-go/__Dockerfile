@@ -1,0 +1,28 @@
+# Alpine is chosen for its small footprint
+# compared to Ubuntu
+FROM golang:1.16-alpine
+
+# Create and set the current working directory
+WORKDIR /app
+
+# Update aloine and add bash, git, openssh
+RUN apk update && apk upgrade && \
+    apk add --no-cache bash git openssh
+
+# Download dependencies
+COPY go.mod go.sum ./
+RUN export GOPROXY=direct && \
+    go mod download
+
+# Copy application code 
+COPY *.go ./
+
+# Build the application and put it at the root for a shorter cmd to run it
+RUN go build -o /sa-webapp-go
+
+# Expose the port that the app will be listening on
+# This is just for readability
+EXPOSE 8080
+
+# Start the app
+CMD ["/sa-webapp-go"]
