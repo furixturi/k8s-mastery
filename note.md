@@ -129,6 +129,10 @@ https://semaphoreci.com/community/tutorials/building-and-testing-a-rest-api-in-g
 
 
 # Step 2 dockerize
+Run an image and access its bash
+```
+docker run -it <image> /bin/bash
+```
 ## sa-frontend
 ### Option 1 - build locally and only use nginx docker
 
@@ -179,4 +183,31 @@ Two options:
      2. build go executable without CGO (https://stackoverflow.com/questions/62632340/golang-linux-docker-error-standard-init-linux-go211-no-such-file-or-dir)
 ```
 CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-extldflags "-static"' .
+```
+
+## sa-logic
+### Get ENV and convert to int
+```
+# sentiment_analysis.py
+SA_LOGIC_PORT = int(os.getenv('SA_LOGIC_PORT'))
+```
+# Kubernetes
+## Install minikube
+https://minikube.sigs.k8s.io/docs/start/
+
+```sh
+$ brew install minikube
+```
+## start minikube
+```sh
+$ minikube start
+```
+## interact with the cluster
+```sh
+$ kubectl get po -A
+```
+
+## enable the dashboard
+```sh
+$ minikube dashboard
 ```
