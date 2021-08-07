@@ -1,6 +1,9 @@
 FROM python:3.6-slim
 COPY sa /app
 WORKDIR /app
+
+ENV SA_LOGIC_PORT=5000
+
 RUN pip3 install -r requirements.txt && \
     python3 -m textblob.download_corpora
 EXPOSE 5000
