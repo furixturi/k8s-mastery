@@ -236,7 +236,7 @@ https://minikube.sigs.k8s.io/docs/start/
   ```sh
   $ kubectl port-forward sa-frontend 8888:80
   ```
-
+  note: this is not how we expose the frontend properly, deploy and use a load balancer service.
 ## create `service` - load balancer
 ### frontend load balancer
 - use labels as selectors in the manifest yaml
@@ -268,28 +268,58 @@ minikube will open it up in the default browser
 ```sh
 $ minikube service sa-frontend-lb
 ```
-
+### Important notes for frontend
+- cannot use ENV since the code will be running in the user browser and there's no way to inject runtime ENV there.
+- if there's some dynamic content to inject, use `ARG` then `ENV=$ARG` in Dockerfile to inject at build time
+- **cannot** use k8s `cluster internal IP` or `cluster internal host name` since the frontend code is running in the user's browser, not in the cluster
+  - which means the webapp URL for the frontend needs to be accessible outside of the cluster, e.g., by deploying a public `load balancer` service
 ## create `deployment`
 About the `apiVersion: apps/v1` in `sa-frontend-deployment.yaml`: https://matthewpalmer.net/kubernetes-app-developer/articles/kubernetes-apiversion-definition-guide.html
 
 ### create a rolling deployment
-```sh
-$ kubectl apply -f sa-frontend-deployment.yaml
-```
-Verify: 
 
-```sh
-$ kubectl get pods --show-labels
-NAME                           READY   STATUS    RESTARTS   AGE     LABELS
-sa-frontend                    1/1     Running   0          128m    app=sa-frontend
-sa-frontend-69465f4877-55zx6   1/1     Running   0          5m48s   app=sa-frontend,pod-template-hash=69465f4877
-sa-frontend-69465f4877-pwxl5   1/1     Running   0          5m48s   app=sa-frontend,pod-template-hash=69465f4877
-```
+- To provide ENVs in the deployment manifest yaml:
+  ```
+  # sa-web-app-deployment.yaml
+    ...
+    template:
+      ...
+      spec:
+        containers:
+        - image: alabebop/sentiment-analysis-webapp-multistage
+          imagePullPolicy: Always
+          name: sa-web-app
+          env:
+            - name: SA_LOGIC_URL
+              value: "http://sa-logic"
+              # value: "http://10.108.232.130"
+            - name: SA_LOGIC_PORT
+              value: "80"
+            - name: SA_WEBAPP_PORT
+              value: "8080"
+          ...
+  ```
+- To create and update the deployment manifest yaml:
+  ```sh
+  $ kubectl apply -f sa-frontend-deployment.yaml
+  ```
+  Repeat this when we e.g. change an ENV value.
 
-Delete the sa-frontend, which was created earlier separately.
-```
-$ kubectl delete pod sa-frontend
-```
+- To verify the deployed pods: 
+
+  ```sh
+  $ kubectl get pods --show-labels
+  NAME                           READY   STATUS    RESTARTS   AGE     LABELS
+  sa-frontend # this was manual  1/1     Running   0          128m    app=sa-frontend
+  sa-frontend-69465f4877-55zx6   1/1     Running   0          5m48s   app=sa-frontend,pod-template-hash=69465f4877
+  sa-frontend-69465f4877-pwxl5   1/1     Running   0          5m48s   app=sa-frontend,pod-template-hash=69465f4877
+  ```
+
+- To delete the sa-frontend, which was created earlier separately.
+  ```sh
+  $ kubectl delete pod sa-frontend
+  ```
+  If we rebuilt and pushed a new image, do this will deploy new containers with the updated image.
 ### roll out a new version with the possibility to restore using the `--record` flag
 - rollout
   ```
@@ -323,19 +353,72 @@ $ kubectl delete pod sa-frontend
 
 ## the sa-logic
 ### create the deployment
-```
+```sh
 $ kubectl apply -f sa-logic-deployment.yaml
 ```
 
 ### create the service
-```
+```sh
 $ kubectl apply -f service-sa-logic.yaml
 ```
 Verify
-```
+```sh
 $ kubectl get svc
 NAME             TYPE           CLUSTER-IP       EXTERNAL-IP   PORT(S)        AGE
-kubernetes       ClusterIP      10.96.0.1        <none>        443/TCP        14h
-sa-frontend-lb   LoadBalancer   10.98.205.78     <pending>     80:31820/TCP   3h11m
-sa-logic         ClusterIP      10.108.232.130   <none>        80/TCP         118s
+kubernetes       ClusterIP      10.96.0.1        <none>        443/TCP        16h
+sa-frontend-lb   LoadBalancer   10.98.205.78     <pending>     80:31820/TCP   5h37m
+sa-logic         ClusterIP      10.108.232.130   <none>        80/TCP         147m
+sa-web-app-lb    LoadBalancer   10.104.249.181   <pending>     80:32161/TCP   88m
 ```
+Other containers in the cluster can access this service by its name defined in the manifest yaml.
+```yaml
+# service-sa-logic.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: sa-logic
+spec:
+  ports:
+    - port: 80
+      protocol: TCP
+      targetPort: 5000
+...
+```
+```yaml
+# sa-web-app-deployment.yaml
+...
+    spec:
+      containers:
+      - image: alabebop/sentiment-analysis-webapp-multistage
+        imagePullPolicy: Always
+        name: sa-web-app
+        env:
+          - name: SA_LOGIC_URL
+            value: "http://sa-logic"
+            # or use the internal IP
+            # value: "http://10.108.232.130"
+          - name: SA_LOGIC_PORT
+            value: "80"
+```
+Pay attention to use the exposed port of the internal service, not its target port.
+## work with k8s containers with `kubectl`
+### follow log of containers under a particular label
+```
+$ kubectl logs -f -l app=sa-web-app
+```
+### get the shell of a container
+
+```
+$ kubectl exec -it sa-web-app-699fd8cfcd-m8km2 -- /bin/bash
+```
+### Linux Alpine
+- install curl
+  ```
+  bash-5.1# apk --no-cache add curl
+  ```
+- print all env
+  ```
+  bash-5.1# printenv
+  ```
+
+
