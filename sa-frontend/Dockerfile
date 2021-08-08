@@ -5,8 +5,9 @@ FROM node:10 AS builder
 WORKDIR /app
 
 # --build-arg
-ARG SA_WEBAPP_URL=http://sa-web-app
-ARG SA_WEBAPP_PORT=8080
+# the URL here is the public URI of the sa webapp, not the cluster internal one
+ARG SA_WEBAPP_URL=http://localhost
+ARG SA_WEBAPP_PORT=57068
 
 ENV REACT_APP_BE_SERVICE_URL=$SA_WEBAPP_URL
 ENV REACT_APP_BE_SERVICE_PORT=$SA_WEBAPP_PORT
