@@ -181,7 +181,7 @@ Two options:
     apk add --no-cache bash git openssh` to add git & co., or
   2. use multi stage to build a much smaller image
      1. can't name the runtime stage
-     2. build go executable without CGO (https://stackoverflow.com/questions/62632340/golang-linux-docker-error-standard-init-linux-go211-no-such-file-or-dir)
+     2. at build stage, we need to build a static go executable without CGO (https://stackoverflow.com/questions/62632340/golang-linux-docker-error-standard-init-linux-go211-no-such-file-or-dir)
 ```
 CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-extldflags "-static"' .
 ```
@@ -193,22 +193,80 @@ CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-extldflags "-static"' .
 SA_LOGIC_PORT = int(os.getenv('SA_LOGIC_PORT'))
 ```
 # Kubernetes
-## Install minikube
+## minikube 
+- Install minikube
 https://minikube.sigs.k8s.io/docs/start/
 
+  ```sh
+  $ brew install minikube
+  ```
+- start minikube
+  ```sh
+  $ minikube start
+  ```
+- interact with the cluster
+  ```sh
+  $ kubectl get po -A
+  ```
+- enable the dashboard
+  ```sh
+  $ minikube dashboard
+  ```
+- get nodes
+  ```
+  $ kubctl get nodes
+  NAME       STATUS   ROLES                  AGE   VERSION
+  minikube   Ready    control-plane,master   9h    v1.21.2
+  ```
+- get pods and show labels
+  ```
+  $ kubctl get pods --show-labels
+  NAME          READY   STATUS    RESTARTS   AGE   LABELS
+  sa-frontend   1/1     Running   0          80m   app=sa-frontend
+  ```
+
+## create `pod` and access the application running on the pods
+### sa-frontend
+- update the image
+- create the pod using `kubectl`
+  ```sh
+  $ kubectl create -f sa-frontend-pod.yaml
+  ```
+- use port-forward to access at `localhost` (note: use a port bigger than 1024)
+  ```sh
+  $ kubectl port-forward sa-frontend 8888:80
+  ```
+
+## create `service` - load balancer
+### frontend load balancer
+- use labels as selectors in the manifest yaml
+  ```yaml
+  # sa-frontend-pod.yaml
+    metadata:
+      ...
+      labels:
+        app: sa-frontend     
+  ```
+  ```yaml
+  # service-sa-frontend-lb.yaml
+    selector:
+      app: sa-frontend
+  ```
+- create the service
+  ```sh
+  $ kubectl create -f service-sa-frontend-lb.yaml
+  ```
+- Verify:
+  ```sh
+  $ kubectl get svc
+  NAME             TYPE           CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+  kubernetes       ClusterIP      10.96.0.1      <none>        443/TCP        10h
+  sa-frontend-lb   LoadBalancer   10.98.205.78   <pending>     80:31820/TCP   18s
+  ```
+### start the service with minikube
+minikube will open it up in the default browser
 ```sh
-$ brew install minikube
-```
-## start minikube
-```sh
-$ minikube start
-```
-## interact with the cluster
-```sh
-$ kubectl get po -A
+$ minikube service sa-frontend-lb
 ```
 
-## enable the dashboard
-```sh
-$ minikube dashboard
-```
+## create `deployment`
