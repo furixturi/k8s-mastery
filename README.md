@@ -1,9 +1,15 @@
 # What is this
+A review and learn session of Microservices, Docker, k8s.
+
+Started with this wonderful material:
 https://www.freecodecamp.org/news/learn-kubernetes-in-under-3-hours-a-detailed-guide-to-orchestrating-containers-114ff420e882/
 
+With a rewrite of the Java web-app in Golang, experiments to multi-stage build FE image with ARGs, use ENVs for flexibility wherever needed, etc.
+
+Below are notes I took on the go.
 # Step 1: Locally get the three apps up and running and working together
 
-## sa-frontend
+## 1. sa-frontend
 ### Nginx on Mac
 #### Install with Homebrew
 
@@ -128,7 +134,7 @@ https://zetcode.com/golang/getpostrequest/
 https://semaphoreci.com/community/tutorials/building-and-testing-a-rest-api-in-go-with-gorilla-mux-and-postgresql
 
 
-# Step 2 dockerize
+# Step 2: dockerize everything
 - Run an image and access its bash
 ```
 docker run -it <image> /bin/bash
@@ -192,7 +198,7 @@ CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-extldflags "-static"' .
 # sentiment_analysis.py
 SA_LOGIC_PORT = int(os.getenv('SA_LOGIC_PORT'))
 ```
-# Kubernetes
+# Step 3: k8s with minikube
 ## minikube 
 - Install minikube
 https://minikube.sigs.k8s.io/docs/start/
