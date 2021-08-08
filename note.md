@@ -320,3 +320,22 @@ $ kubectl delete pod sa-frontend
   $ kubectl rollout undo deployment sa-frontend --to-revision=1
   deployment.apps/sa-frontend rolled back
   ```
+
+## the sa-logic
+### create the deployment
+```
+$ kubectl apply -f sa-logic-deployment.yaml
+```
+
+### create the service
+```
+$ kubectl apply -f service-sa-logic.yaml
+```
+Verify
+```
+$ kubectl get svc
+NAME             TYPE           CLUSTER-IP       EXTERNAL-IP   PORT(S)        AGE
+kubernetes       ClusterIP      10.96.0.1        <none>        443/TCP        14h
+sa-frontend-lb   LoadBalancer   10.98.205.78     <pending>     80:31820/TCP   3h11m
+sa-logic         ClusterIP      10.108.232.130   <none>        80/TCP         118s
+```
