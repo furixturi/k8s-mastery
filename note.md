@@ -270,3 +270,53 @@ $ minikube service sa-frontend-lb
 ```
 
 ## create `deployment`
+About the `apiVersion: apps/v1` in `sa-frontend-deployment.yaml`: https://matthewpalmer.net/kubernetes-app-developer/articles/kubernetes-apiversion-definition-guide.html
+
+### create a rolling deployment
+```sh
+$ kubectl apply -f sa-frontend-deployment.yaml
+```
+Verify: 
+
+```sh
+$ kubectl get pods --show-labels
+NAME                           READY   STATUS    RESTARTS   AGE     LABELS
+sa-frontend                    1/1     Running   0          128m    app=sa-frontend
+sa-frontend-69465f4877-55zx6   1/1     Running   0          5m48s   app=sa-frontend,pod-template-hash=69465f4877
+sa-frontend-69465f4877-pwxl5   1/1     Running   0          5m48s   app=sa-frontend,pod-template-hash=69465f4877
+```
+
+Delete the sa-frontend, which was created earlier separately.
+```
+$ kubectl delete pod sa-frontend
+```
+### roll out a new version with the possibility to restore using the `--record` flag
+- rollout
+  ```
+  $ kubectl apply -f sa-frontend-deployment-green.yaml --record
+  deployment "sa-frontend" configured
+  ```
+- monitor the rollout status
+  ```
+  $ kubectl rollout status deployment sa-frontend
+  Waiting for deployment "sa-frontend" rollout to finish: 1 old replicas are pending termination...
+  Waiting for deployment "sa-frontend" rollout to finish: 1 old replicas are pending termination...
+  Waiting for deployment "sa-frontend" rollout to finish: 1 old replicas are pending termination...
+  Waiting for deployment "sa-frontend" rollout to finish: 1 old replicas are pending termination...
+  Waiting for deployment "sa-frontend" rollout to finish: 1 old replicas are pending termination...
+  Waiting for deployment "sa-frontend" rollout to finish: 1 of 2 updated replicas are available...
+  deployment "sa-frontend" successfully rolled out
+  ```
+- check rollout history
+  ```sh
+  $ kubectl rollout history deployment sa-frontend
+  deployment.apps/sa-frontend
+  REVISION  CHANGE-CAUSE
+  1         <none>
+  2         kubectl apply --filename=sa-frontend-deployment-green.yaml --record=true
+  ```
+- revert to the previous version
+  ```sh
+  $ kubectl rollout undo deployment sa-frontend --to-revision=1
+  deployment.apps/sa-frontend rolled back
+  ```
