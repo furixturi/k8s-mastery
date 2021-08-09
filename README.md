@@ -574,3 +574,104 @@ To check the resources
   kube-system   kube-proxy-7j45z           1/1     Running   0          140m   192.168.33.253    ip-192-168-33-253.ap-northeast-1.compute.internal            <none>           <none>
   kube-system   kube-proxy-mmndz           1/1     Running   0          140m   192.168.28.150    ip-192-168-28-150.ap-northeast-1.compute.internal            <none>           <none>
   ```
+
+## Deploy the sentiment analysis on EKS
+
+### Deploy sa-logic
+- sa-logic deployment
+  ```sh
+  $ kubectl apply -f sa-logic-deployment.yaml
+  ```
+- sa-logic cluster ip service
+  ```
+  $ kubectl apply -f service-sa-logic.yaml
+  ```
+### Deploy sa-web-app
+- sa-web-app deployment
+  ```sh
+  $ kubectl apply -f sa-web-app-deployment.yaml
+  ```
+- sa-web-app load balancer service
+  ```sh
+  $ kubectl apply -f service-sa-web-app-lb.yaml
+  ```
+### verify and get the external URL of sa-web-app-lb
+  ```sh
+  $ kubectl get svc
+  NAME             TYPE           CLUSTER-IP       EXTERNAL-IP                    PORT(S)        AGE
+  kubernetes       ClusterIP      10.100.0.1       <none>                         443/TCP        16h
+  sa-logic         ClusterIP      10.100.90.84     <none>                         80/TCP         5m15s
+  sa-web-app-lb    LoadBalancer   10.100.120.236   {sa-web-app-lb external url}   80:30779/TCP   15s
+  ```
+- Call the web app load balancer external IP
+  - `/healthcheck` endpoint
+    ```
+    $ curl http://{sa-web-app-lb external URL}/healthcheck
+    ```
+    ```
+    {"result":"ok"}%
+    ```
+  - `/sentiment` endpoint
+    ```
+    $ curl --header "Content-Type: application/json" \
+      --request POST \
+      --data '{"sentence":"I am very happy"}' \
+      http://{sa-web-app-lb external URL}/sentiment
+    ```
+    ```
+    {"polarity":1,"sentence":"I am very happy"}%
+    ```
+Note down the sa-web-app-lb service external URL.
+
+### Deploy sa-frontend
+#### create the sa-frontend deployment
+- rebuild the image giving the sa-web-app-lb external url as build arg
+  - replace {sa-web-app-lb external URL} with the URL noted from the calling `kubectl get svc`
+  ```sh
+  # In the folder where the sa-frontend Dockerfile is
+  $ docker build -f Dockerfile -t $DOCKER_USERNAME/sentiment-analysis-frontend-multistage --build-arg SA_WEBAPP_URL=http://{sa-web-app-lb external URL} --build-arg SA_WEBAPP_PORT=80 .
+  ```
+- push the image
+  ```sh
+  $ docker push alabebop/sentiment-analysis-frontend-multistage
+  ```
+- create the sa-frontend deployment
+  ```sh
+  # In the folder where the manifest for sa-frontend-deployment yaml file is
+  $ kubectl apply -f sa-frontend-deployment.yaml
+  ```
+  - to check the deployment status
+  ```sh
+  $ kubectl rollout status deployment sa-frontend
+  Waiting for deployment "sa-frontend" rollout to finish: 0 of 2 updated replicas are available...
+  Waiting for deployment "sa-frontend" rollout to finish: 0 of 2 updated replicas are available...
+  Waiting for deployment "sa-frontend" rollout to finish: 1 of 2 updated replicas are available...
+  Waiting for deployment "sa-frontend" rollout to finish: 1 of 2 updated replicas are available...
+  deployment "sa-frontend" successfully rolled out
+  ```
+  - verify the pods are deployed
+  ```sh
+  $ kubectl get pods
+  NAME                           READY   STATUS    RESTARTS   AGE
+  sa-frontend-69465f4877-2z889   1/1     Running   0          22m
+  sa-frontend-69465f4877-45842   1/1     Running   0          22m
+  sa-logic-78c77d4ff6-4tmlg      1/1     Running   0          73m
+  sa-logic-78c77d4ff6-m6jv4      1/1     Running   0          73m
+  sa-web-app-6c6dfbbc75-gpz9h    1/1     Running   0          72m
+  sa-web-app-6c6dfbbc75-gqjgm    1/1     Running   0          72m
+  ```
+#### create the frontend sa-frontend load balancer
+```sh
+$ kubectl apply -f service-sa-frontend-lb.yaml
+```
+verify
+```sh
+$ kubectl get svc
+NAME             TYPE           CLUSTER-IP       EXTERNAL-IP            PORT(S)        AGE
+kubernetes       ClusterIP      10.100.0.1       <none>                 443/TCP        16h
+sa-frontend-lb   LoadBalancer   10.100.50.143    {sa frontend lb url}   80:30688/TCP   62m
+sa-logic         ClusterIP      10.100.90.84     <none>                 80/TCP         61m
+sa-web-app-lb    LoadBalancer   10.100.120.236   {sa web app lb url}    80:30779/TCP   56m
+```
+Now you can open the frontend app in browser and see it working on EKS.
+
