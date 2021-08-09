@@ -428,3 +428,149 @@ $ kubectl exec -it sa-web-app-699fd8cfcd-m8km2 -- /bin/bash
   ```
 
 
+# Step 4: EKS
+
+## Prepare to use EKS
+### install eksctl
+https://docs.aws.amazon.com/eks/latest/userguide/eksctl.html
+
+1. If no Homebrew, install Homebrew
+  ```
+  $ /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
+  ```
+
+2. Install Weaveworks Homebrew tap
+  ```
+  $ brew tap weaveworks/tap
+  ```
+
+3. Install `eksctl`
+  ```
+  $ brew install weaveworks/tap/eksctl
+  ```
+  verify
+  ```
+  $ eksctl version
+  0.60.0
+  ```
+
+## Deploy an EKS fargate cluster
+### Use `eksctl`
+https://docs.aws.amazon.com/eks/latest/userguide/getting-started-eksctl.html
+```
+$ eksctl create cluster \                           
+--name sentiment-analysis \
+--region ap-northeast-1 \
+--fargate
+```
+It took 32 min to create 
+```
+2021-08-08 21:42:37 [ℹ]  eksctl version 0.60.0
+2021-08-08 21:42:37 [ℹ]  using region ap-northeast-1
+2021-08-08 21:42:38 [ℹ]  setting availability zones to [ap-northeast-1d ap-northeast-1c ap-northeast-1a]
+2021-08-08 21:42:38 [ℹ]  subnets for ap-northeast-1d - public:192.168.0.0/19 private:192.168.96.0/19
+2021-08-08 21:42:38 [ℹ]  subnets for ap-northeast-1c - public:192.168.32.0/19 private:192.168.128.0/19
+2021-08-08 21:42:38 [ℹ]  subnets for ap-northeast-1a - public:192.168.64.0/19 private:192.168.160.0/19
+2021-08-08 21:42:38 [ℹ]  nodegroup "ng-ca0f54b4" will use "" [AmazonLinux2/1.20]
+2021-08-08 21:42:38 [ℹ]  using Kubernetes version 1.20
+2021-08-08 21:42:38 [ℹ]  creating EKS cluster "sentiment-analysis" in "ap-northeast-1" region with Fargate profile and managed nodes
+2021-08-08 21:42:38 [ℹ]  will create 2 separate CloudFormation stacks for cluster itself and the initial managed nodegroup
+2021-08-08 21:42:38 [ℹ]  if you encounter any issues, check CloudFormation console or try 'eksctl utils describe-stacks --region=ap-northeast-1 --cluster=sentiment-analysis'
+2021-08-08 21:42:38 [ℹ]  CloudWatch logging will not be enabled for cluster "sentiment-analysis" in "ap-northeast-1"
+2021-08-08 21:42:38 [ℹ]  you can enable it with 'eksctl utils update-cluster-logging --enable-types={SPECIFY-YOUR-LOG-TYPES-HERE (e.g. all)} --region=ap-northeast-1 --cluster=sentiment-analysis'
+2021-08-08 21:42:38 [ℹ]  Kubernetes API endpoint access will use default of {publicAccess=true, privateAccess=false} for cluster "sentiment-analysis" in "ap-northeast-1"
+2021-08-08 21:42:38 [ℹ]  2 sequential tasks: { create cluster control plane "sentiment-analysis", 3 sequential sub-tasks: { 2 sequential sub-tasks: { wait for control plane to become ready, create fargate profiles }, 1 task: { create addons }, create managed nodegroup "ng-ca0f54b4" } }
+2021-08-08 21:42:38 [ℹ]  building cluster stack "eksctl-sentiment-analysis-cluster"
+2021-08-08 21:42:39 [ℹ]  deploying stack "eksctl-sentiment-analysis-cluster"
+2021-08-08 21:43:09 [ℹ]  waiting for CloudFormation stack "eksctl-sentiment-analysis-cluster"
+2021-08-08 21:43:41 [ℹ]  waiting for CloudFormation stack "eksctl-sentiment-analysis-cluster"
+2021-08-08 21:44:42 [ℹ]  waiting for CloudFormation stack "eksctl-sentiment-analysis-cluster"
+2021-08-08 21:45:43 [ℹ]  waiting for CloudFormation stack "eksctl-sentiment-analysis-cluster"
+2021-08-08 21:46:44 [ℹ]  waiting for CloudFormation stack "eksctl-sentiment-analysis-cluster"
+2021-08-08 21:47:45 [ℹ]  waiting for CloudFormation stack "eksctl-sentiment-analysis-cluster"
+2021-08-08 21:48:46 [ℹ]  waiting for CloudFormation stack "eksctl-sentiment-analysis-cluster"
+2021-08-08 21:49:48 [ℹ]  waiting for CloudFormation stack "eksctl-sentiment-analysis-cluster"
+2021-08-08 21:50:49 [ℹ]  waiting for CloudFormation stack "eksctl-sentiment-analysis-cluster"
+2021-08-08 21:51:50 [ℹ]  waiting for CloudFormation stack "eksctl-sentiment-analysis-cluster"
+2021-08-08 21:52:51 [ℹ]  waiting for CloudFormation stack "eksctl-sentiment-analysis-cluster"
+2021-08-08 21:53:52 [ℹ]  waiting for CloudFormation stack "eksctl-sentiment-analysis-cluster"
+2021-08-08 21:54:53 [ℹ]  waiting for CloudFormation stack "eksctl-sentiment-analysis-cluster"
+2021-08-08 21:55:54 [ℹ]  waiting for CloudFormation stack "eksctl-sentiment-analysis-cluster"
+2021-08-08 21:58:00 [ℹ]  creating Fargate profile "fp-default" on EKS cluster "sentiment-analysis"
+2021-08-08 22:02:19 [ℹ]  created Fargate profile "fp-default" on EKS cluster "sentiment-analysis"
+2021-08-08 22:04:51 [ℹ]  "coredns" is now schedulable onto Fargate
+2021-08-08 22:06:58 [ℹ]  "coredns" is now scheduled onto Fargate
+2021-08-08 22:06:58 [ℹ]  "coredns" pods are now scheduled onto Fargate
+2021-08-08 22:09:02 [ℹ]  building managed nodegroup stack "eksctl-sentiment-analysis-nodegroup-ng-ca0f54b4"
+2021-08-08 22:09:03 [ℹ]  deploying stack "eksctl-sentiment-analysis-nodegroup-ng-ca0f54b4"
+2021-08-08 22:09:03 [ℹ]  waiting for CloudFormation stack "eksctl-sentiment-analysis-nodegroup-ng-ca0f54b4"
+2021-08-08 22:09:19 [ℹ]  waiting for CloudFormation stack "eksctl-sentiment-analysis-nodegroup-ng-ca0f54b4"
+2021-08-08 22:09:37 [ℹ]  waiting for CloudFormation stack "eksctl-sentiment-analysis-nodegroup-ng-ca0f54b4"
+2021-08-08 22:09:58 [ℹ]  waiting for CloudFormation stack "eksctl-sentiment-analysis-nodegroup-ng-ca0f54b4"
+2021-08-08 22:10:16 [ℹ]  waiting for CloudFormation stack "eksctl-sentiment-analysis-nodegroup-ng-ca0f54b4"
+2021-08-08 22:10:37 [ℹ]  waiting for CloudFormation stack "eksctl-sentiment-analysis-nodegroup-ng-ca0f54b4"
+2021-08-08 22:10:57 [ℹ]  waiting for CloudFormation stack "eksctl-sentiment-analysis-nodegroup-ng-ca0f54b4"
+2021-08-08 22:11:17 [ℹ]  waiting for CloudFormation stack "eksctl-sentiment-analysis-nodegroup-ng-ca0f54b4"
+2021-08-08 22:11:34 [ℹ]  waiting for CloudFormation stack "eksctl-sentiment-analysis-nodegroup-ng-ca0f54b4"
+2021-08-08 22:11:53 [ℹ]  waiting for CloudFormation stack "eksctl-sentiment-analysis-nodegroup-ng-ca0f54b4"
+2021-08-08 22:12:11 [ℹ]  waiting for CloudFormation stack "eksctl-sentiment-analysis-nodegroup-ng-ca0f54b4"
+2021-08-08 22:12:28 [ℹ]  waiting for CloudFormation stack "eksctl-sentiment-analysis-nodegroup-ng-ca0f54b4"
+2021-08-08 22:12:47 [ℹ]  waiting for CloudFormation stack "eksctl-sentiment-analysis-nodegroup-ng-ca0f54b4"
+2021-08-08 22:12:48 [ℹ]  waiting for the control plane availability...
+2021-08-08 22:12:48 [✔]  saved kubeconfig as "/Users/xiaolshe/.kube/config"
+2021-08-08 22:12:48 [ℹ]  no tasks
+2021-08-08 22:12:48 [✔]  all EKS cluster resources for "sentiment-analysis" have been created
+2021-08-08 22:12:50 [ℹ]  nodegroup "ng-ca0f54b4" has 2 node(s)
+2021-08-08 22:12:50 [ℹ]  node "ip-192-168-11-48.ap-northeast-1.compute.internal" is ready
+2021-08-08 22:12:50 [ℹ]  node "ip-192-168-38-155.ap-northeast-1.compute.internal" is ready
+2021-08-08 22:12:50 [ℹ]  waiting for at least 2 node(s) to become ready in "ng-ca0f54b4"
+2021-08-08 22:12:50 [ℹ]  nodegroup "ng-ca0f54b4" has 2 node(s)
+2021-08-08 22:12:50 [ℹ]  node "ip-192-168-11-48.ap-northeast-1.compute.internal" is ready
+2021-08-08 22:12:50 [ℹ]  node "ip-192-168-38-155.ap-northeast-1.compute.internal" is ready
+2021-08-08 22:14:56 [ℹ]  kubectl command should work with "/Users/xiaolshe/.kube/config", try 'kubectl get nodes'
+2021-08-08 22:14:56 [✔]  EKS cluster "sentiment-analysis" in "ap-northeast-1" region is ready
+```
+
+This creates:
+- A VPC with <u>3 public subnets</u> and <u>3 private subnets</u> in your default region
+- A NAT GW in one of the public subnets
+- An EKS Fargate cluster with a node group of 2 EC2
+- 3 SGs: cluster, control plane, node
+- An IAM role for the EKS cluster
+- A config in `~/.kube` that switches your `kubectl` context to the EKS just created (https://kubernetes.io/docs/tasks/access-application-cluster/configure-access-multiple-clusters/)
+  - To switch it to your local minikube EKS:
+    ```sh
+    $ kubectl config use-context minikube
+    ```
+  - To see which EKS context is the current
+    ```sh
+    $ kubectl config view --minify
+    ```
+  - The context name of the EKS cluster would be something like `{IAM-user-name}@{cluster-name}.{AWS-region}.eksctl.io`
+
+To check the resources
+- view nodes
+  ```sh
+  $ kubectl get nodes -o wide
+  ```
+  ```sh
+  NAME                                                         STATUS   ROLES    AGE    VERSION              INTERNAL-IP       EXTERNAL-IP      OS-IMAGE         KERNEL-VERSION                  CONTAINER-RUNTIME
+  fargate-ip-192-168-160-249.ap-northeast-1.compute.internal   Ready    <none>   15h    v1.20.4-eks-6b7464   192.168.160.249   <none>           Amazon Linux 2   4.14.238-182.422.amzn2.x86_64   containerd://1.4.1
+  fargate-ip-192-168-164-117.ap-northeast-1.compute.internal   Ready    <none>   15h    v1.20.4-eks-6b7464   192.168.164.117   <none>           Amazon Linux 2   4.14.238-182.422.amzn2.x86_64   containerd://1.4.1
+  ip-192-168-28-150.ap-northeast-1.compute.internal            Ready    <none>   138m   v1.20.4-eks-6b7464   192.168.28.150    13.230.73.74     Amazon Linux 2   5.4.129-63.229.amzn2.x86_64     docker://19.3.13
+  ip-192-168-33-253.ap-northeast-1.compute.internal            Ready    <none>   138m   v1.20.4-eks-6b7464   192.168.33.253    175.41.226.192   Amazon Linux 2   5.4.129-63.229.amzn2.x86_64     docker://19.3.13
+  ```
+
+- view pods
+  ```sh
+  $ kubectl get pods --all-namespaces -o wide
+  ```
+  ```sh
+  NAMESPACE     NAME                       READY   STATUS    RESTARTS   AGE    IP                NODE                                                         NOMINATED NODE   READINESS GATES
+  kube-system   aws-node-b8fsx             1/1     Running   0          140m   192.168.33.253    ip-192-168-33-253.ap-northeast-1.compute.internal            <none>           <none>
+  kube-system   aws-node-zjflw             1/1     Running   0          140m   192.168.28.150    ip-192-168-28-150.ap-northeast-1.compute.internal            <none>           <none>
+  kube-system   coredns-6b9c5cf745-4xsgc   1/1     Running   0          15h    192.168.160.249   fargate-ip-192-168-160-249.ap-northeast-1.compute.internal   <none>           <none>
+  kube-system   coredns-6b9c5cf745-c45mz   1/1     Running   0          15h    192.168.164.117   fargate-ip-192-168-164-117.ap-northeast-1.compute.internal   <none>           <none>
+  kube-system   kube-proxy-7j45z           1/1     Running   0          140m   192.168.33.253    ip-192-168-33-253.ap-northeast-1.compute.internal            <none>           <none>
+  kube-system   kube-proxy-mmndz           1/1     Running   0          140m   192.168.28.150    ip-192-168-28-150.ap-northeast-1.compute.internal            <none>           <none>
+  ```
