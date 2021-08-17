@@ -19,7 +19,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-extldflags "-static"' .
 # Then use alpine as the runtime
 FROM alpine:latest
 
-RUN apk --no-cache add ca-certificates bash
+RUN apk --no-cache add ca-certificates bash curl bind-tools mysql-client
 
 WORKDIR /root/
 
