@@ -798,7 +798,6 @@ To verify:
   +----+--------------------+
   2 rows in set (0.001 sec)
   ```
-
 ### Run Docker MySQL locally
 Run a mysql Docker image exposing the port 3306
 https://hub.docker.com/_/mysql
@@ -815,3 +814,55 @@ $ docker run -p 3306:3306 --name test-mysql -e MYSQL_ROOT_PASSWORD=password -d m
   ```
   / # mysql -h host.docker.internal -u alabebop -ppassword test_db
   ```
+
+### Use k8s `externalName` to expose the local mysql to the k8s cluster
+- create the manifest
+  ```yaml
+  # service-external-db.yaml
+  apiVersion: v1
+  kind: Service
+  metadata:
+    name: database-service
+  spec:
+    type: ExternalName
+    externalName: host.docker.internal # this only works on Docker for Mac
+    ports:
+      - protocol: TCP
+        port: 3306
+        name: mysql
+      - protocol: TCP
+        port: 8000
+        name: http
+  ```
+- bash into a web-app-go pod and test the connection
+  ```sh
+  $ kubectl exec -it sa-web-app-6c6dfbbc75-4kmts -- /bin/bash
+  ```
+  - add `dig` by installing the `bind-tool` if you want to use `dig`
+    ```
+    bash-5.1# apk add --no-cache bind-tools
+    ```
+  - add `curl` and `mysql-client` to test connection
+    ```
+    bash-5.1# apk add --no-cache curl mysql-client
+    ```
+  - test the connection to things running externally on localhost
+    - suppose we are running `$ python3 -m http.server 8000`, we can access it from a k8s pod using the `externalName` service `database-service`
+      ```
+      bash-5.1# curl database-service:8000
+      <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+      <html>
+      <head>
+      ...
+      ```
+    - same works for the mysql db running on a docker container on the host machine
+      ```
+      bash-5.1# mysql --host database-service --port 3306 --user alabebop -ppassword test_db
+      ...
+      MySQL [test_db]> select * from test_table;
+      +----+---------------+
+      | id | name          |
+      +----+---------------+
+      |  1 | sample record |
+      +----+---------------+
+      ```

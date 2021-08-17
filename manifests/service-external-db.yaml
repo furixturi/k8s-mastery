@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: database-service
+spec:
+  type: ExternalName
+  # externalName: minikube.host
+  externalName: host.docker.internal
+  ports:
+    - protocol: TCP
+      port: 3306
+      name: mysql
+    - protocol: TCP
+      port: 8000
+      name: http
+# ---
+# apiVersion: v1
+# kind: Endpoints
+# metadata:
+#   name: database-service
+
