@@ -675,3 +675,143 @@ sa-web-app-lb    LoadBalancer   10.100.120.236   {sa web app lb url}    80:30779
 ```
 Now you can open the frontend app in browser and see it working on EKS.
 
+# Connect to an External Database 
+### Info: How to access a service running on Docker's host computer from a Docker container (Docker for Mac OSX)
+
+Docker for Mac internal URL: `http://host.docker.internal`
+
+To verify:
+- Run a minimal Alpine Linux container
+  ```
+  $ docker run --rm -it alpine sh
+  ```
+- Add `cURL` to it
+  ```
+  # apk add curl
+  ```
+- Run a local python http server on port 8000
+  ```
+  $ python3 -m http.server 8000
+  ```
+- Access it from the container
+  ```
+  # curl http://host.docker.internal:8000
+  ``` 
+
+## Locally
+### Run a mysql on localhost
+- Start mysql
+  ```sh
+  $ mysql.server start
+  ```
+- Connect to it
+  ```sh
+  $ mysql -u root
+  ```
+- Create a fully priviliged user for local as well as remote
+  ```sh
+  # create for localhost access
+  mysql> create user 'alabebop'@'localhost' identified with mysql_native_password by 'password';
+  mysql> grant all on *.* to 'alabebop'@'localhost' with grant option;
+  # create for remote access
+  mysql> create user 'alabebop'@'%' identified with mysql_native_password by 'password';
+  mysql> grant all on *.* to 'alabebop'@'%' with grant option;
+  # quit to switch user
+  mysql>\q
+  ```
+- Connect as the new user and create a DB
+  ```sh
+  $ mysql -u alabebop -ppassword
+  # verify user
+  mysql> select user();
+  +--------------------+
+  | user()             |
+  +--------------------+
+  | alabebop@localhost |
+  +--------------------+
+  ```
+- Create a test database
+  ```sql
+  -- create a test db
+  mysql> create database test_db;
+  -- switch to the new db
+  mysql> use test_db;
+  -- create a test table
+  mysql> create table test_table ( id smallint unsigned not null auto_increment, name varchar(20) not null, constraint pk_example primary key (id) );
+  -- insert one record
+  mysql> insert into test_table (id, name) values (null, 'Sample data');
+  -- verify
+  mysql> select * from test_table;
+  +----+-------------+
+  | id | name        |
+  +----+-------------+
+  |  1 | Sample data |
+  +----+-------------+
+  1 row in set (0.00 sec)
+  ```
+- verify database
+  ```sql
+  mysql> show databases;
+  +--------------------+
+  | Database           |
+  +--------------------+
+  | information_schema |
+  | mysql              |
+  | performance_schema |
+  | sys                |
+  | test_db            |
+  +--------------------+
+  ```
+- To shut down the local mysql later
+  ```sh
+  $ mysql.server stop
+  ```
+### Run a Docker container and access the localhost mysql db from it
+- Run a minimal Alpine Linux container and add `curl` and `mysql-client` to it
+  ```
+  $ docker run --rm -it alpine sh
+  # apk add curl
+  # apk add mysql-client
+  ```
+- Connect to the localhost mysql test db from the container
+  ```
+  # mysql -h host.docker.internal -u alabebop -ppassword test_db
+  ```
+- Run sql at the localhost mysql database from container
+  ```sql
+  MySQL [test_db]> select * from test_table;
+  +----+-------------+
+  | id | name        |
+  +----+-------------+
+  |  1 | Sample data |
+  +----+-------------+
+  
+  MySQL [test_db]> insert into test_table (id, name) values (null, 'Sample data remote');
+  Query OK, 1 row affected (0.002 sec)
+
+  MySQL [test_db]> select * from test_table;
+  +----+--------------------+
+  | id | name               |
+  +----+--------------------+
+  |  1 | Sample data        |
+  |  2 | Sample data remote |
+  +----+--------------------+
+  2 rows in set (0.001 sec)
+  ```
+
+### Run Docker MySQL locally
+Run a mysql Docker image exposing the port 3306
+https://hub.docker.com/_/mysql
+```sh
+# example: docker run --name some-mysql -e MYSQL_ROOT_PASSWORD=my-secret-pw -d mysql:tag
+$ docker run -p 3306:3306 --name test-mysql -e MYSQL_ROOT_PASSWORD=password -d mysql:8
+```
+- To access it locally
+  ```sh
+  mysql --host 127.0.0.1 --port 3306 --user root --password
+  ```
+- To access it from another container
+  - since we exposed the port 3306, everything works the same as running a local mysql
+  ```
+  / # mysql -h host.docker.internal -u alabebop -ppassword test_db
+  ```
