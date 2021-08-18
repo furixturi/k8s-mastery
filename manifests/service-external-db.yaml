@@ -4,8 +4,10 @@ metadata:
   name: database-service
 spec:
   type: ExternalName
-  # externalName: minikube.host
-  externalName: host.docker.internal
+  # local
+  # externalName: host.docker.internal
+  # RDS
+  externalName: rds-eksworkshop.ckh6ob5pwvnv.ap-northeast-1.rds.amazonaws.com
   ports:
     - protocol: TCP
       port: 3306
@@ -13,9 +15,5 @@ spec:
     - protocol: TCP
       port: 8000
       name: http
-# ---
-# apiVersion: v1
-# kind: Endpoints
-# metadata:
-#   name: database-service
+
 

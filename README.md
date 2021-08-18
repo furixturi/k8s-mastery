@@ -866,3 +866,435 @@ $ docker run -p 3306:3306 --name test-mysql -e MYSQL_ROOT_PASSWORD=password -d m
       |  1 | sample record |
       +----+---------------+
       ```
+
+## On EKS
+
+We will use an EKS cluster on EC2 created earlier. Switch context to use it (your AWS CLI credential must be properly configured to access it).
+```sh
+# check the context name
+$ cat ~/.kube/config
+```
+Look for something like
+```yaml
+- context:
+    cluster: <your cluster name>.ap-northeast-1.eksctl.io
+    user: <your IAM user name>@<your cluster name>.ap-northeast-1.eksctl.io
+  name: <your IAM user name>@<your cluster name>.ap-northeast-1.eksctl.io
+```
+Take the value of the `name` as the context to switch.
+```sh
+$ kubectl config use-context <your IAM user name>@<your cluster name>.ap-northeast-1.eksctl.io
+```
+The following part will use [EKS workshop - Security Groups for Pods](https://www.eksworkshop.com/beginner/115_sg-per-pod/) as an reference.
+### SGs
+#### Prerequisite - a node group using EC2 instances that support pod level SG
+
+Security groups for pods are supported by most Nitro-based Amazon EC2 instance families, including the m5, c5, r5, p3, m6g, c6g, and r6g instance families, but **not the t3 instance family**. 
+
+Create a node group with m5.large instances
+
+- add a manifest yaml file `nodegroup-sec-group.yaml`
+  ```yaml
+  # nodegroup-sec-group.yaml
+  apiVersion: eksctl.io/v1alpha5
+  kind: ClusterConfig
+  metadata:
+    name: eksworkshop-eksctl
+    region: ap-northeast-1
+
+  managedNodeGroups:
+  - name: nodegroup-sec-group
+    desiredCapacity: 1
+    instanceType: m5.large
+  ```
+- use `eksctl` to create 
+  ```sh
+  $ eksctl create nodegroup -f nodegroup-sec-group.yaml
+  ```
+  This should take about 5 min, wait until the creation is complete and verify
+  ```sh
+  $ kubectl get nodes \
+  --selector beta.kubernetes.io/instance-type=m5.large
+  ```
+#### Create SGs
+- Export the VPC ID as an ENV
+  ```sh
+  $ export VPC_ID=$(aws eks describe-cluster \
+    --name eksworkshop-eksctl \
+    --query "cluster.resourcesVpcConfig.vpcId" \
+    --output text)
+  ```
+- Create RDS security group
+  ```sh
+  $ aws ec2 create-security-group \
+    --description 'RDS SG' \
+    --group-name 'RDS_SG' \
+    --vpc-id ${VPC_ID}
+
+  {
+    "GroupId": "sg-05d8a1aafcc0353a3"
+  }
+
+  # save the security group ID for future use
+  $ export RDS_SG=$(aws ec2 describe-security-groups \
+      --filters Name=group-name,Values=RDS_SG Name=vpc-id,Values=${VPC_ID} \
+      --query "SecurityGroups[0].GroupId" --output text)
+  ```
+- Create Pod SG
+  ```sh
+  $ aws ec2 create-security-group \
+    --description 'POD SG' \
+    --group-name 'POD_SG' \
+    --vpc-id ${VPC_ID}
+  
+  {
+    "GroupId": "sg-05ef575e7b2519455"
+  }
+
+  # save the security group ID for future use
+  $ export POD_SG=$(aws ec2 describe-security-groups \
+      --filters Name=group-name,Values=POD_SG Name=vpc-id,Values=${VPC_ID} \
+      --query "SecurityGroups[0].GroupId" --output text)
+  ```
+
+#### Update SGs
+- update the node group SG to allow **TCP and UDP on port 53** from pod SG, since pods need this for DNS resolution
+  ```sh
+  $ export NODE_GROUP_SG=$(aws ec2 describe-security-groups \
+      --filters Name=tag:Name,Values=eks-cluster-sg-eksworkshop-eksctl-* Name=vpc-id,Values=${VPC_ID} \
+      --query "SecurityGroups[0].GroupId" \
+      --output text)
+  $ echo "Node Group security group ID: ${NODE_GROUP_SG}"
+
+  # allow POD_SG to connect to NODE_GROUP_SG using TCP 53
+  $ aws ec2 authorize-security-group-ingress \
+      --group-id ${NODE_GROUP_SG} \
+      --protocol tcp \
+      --port 53 \
+      --source-group ${POD_SG}
+
+  # allow POD_SG to connect to NODE_GROUP_SG using UDP 53
+  $ aws ec2 authorize-security-group-ingress \
+      --group-id ${NODE_GROUP_SG} \
+      --protocol udp \
+      --port 53 \
+      --source-group ${POD_SG}
+  ```
+
+- Launch a jumpbox EC2 instance to populate the RDS, note down its SG
+  ```
+  export JUMPBOX_SG=sg-0b3f975d4b0da3030
+  ```
+- Allow the pod SG and the jumpbox SG to access the RDS SG
+  ```sh
+  # allow Cloud9 to connect to RDS
+  aws ec2 authorize-security-group-ingress \
+      --group-id ${RDS_SG} \
+      --protocol tcp \
+      --port 3306 \
+      --source-group ${JUMPBOX_SG}
+
+  # Allow POD_SG to connect to the RDS
+  aws ec2 authorize-security-group-ingress \
+      --group-id ${RDS_SG} \
+      --protocol tcp \
+      --port 3306 \
+      --source-group ${POD_SG}
+  ```
+
+### RDS MySQL DB
+#### Create DB 
+- Create DB subnet group
+  - Use the same subnets that the EKS cluster is in
+  ```sh
+  $ export PUBLIC_SUBNETS_ID=$(aws ec2 describe-subnets \
+      --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag:Name,Values=eksctl-eksworkshop-eksctl-cluster/SubnetPublic*" \
+      --query 'Subnets[*].SubnetId' \
+      --output json | jq -c .)
+
+  # create a db subnet group
+  $ aws rds create-db-subnet-group \
+      --db-subnet-group-name rds-eksworkshop \
+      --db-subnet-group-description rds-eksworkshop \
+      --subnet-ids ${PUBLIC_SUBNETS_ID}
+  ```
+- Create DB
+  ```sh
+  # get RDS SG ID if not yet
+  $ export RDS_SG=$(aws ec2 describe-security-groups \
+      --filters Name=group-name,Values=RDS_SG Name=vpc-id,Values=${VPC_ID} \
+      --query "SecurityGroups[0].GroupId" --output text)
+
+  # specify a password for RDS
+  $ export RDS_PASSWORD=password
+
+  # create RDS MySQL instance
+  $ aws rds create-db-instance \
+      --db-instance-identifier rds-eksworkshop \
+      --db-name test_db \
+      --db-instance-class db.t3.micro \
+      --engine mysql \
+      --db-subnet-group-name rds-eksworkshop \
+      --vpc-security-group-ids $RDS_SG \
+      --master-username admin \
+      --publicly-accessible \
+      --master-user-password ${RDS_PASSWORD} \
+      --backup-retention-period 0 \
+      --allocated-storage 20
+  ```
+  - It takes some time before the DB instance becomes available
+    ```sh
+    # Check status and see if it becomes "available"
+    $ aws rds describe-db-instances \
+    --db-instance-identifier rds-eksworkshop \
+    --query "DBInstances[].DBInstanceStatus" \
+    --output text
+    ```
+- Get DB endpoint
+  ```sh
+  $ export RDS_ENDPOINT=$(aws rds describe-db-instances \
+    --db-instance-identifier rds-eksworkshop \
+    --query 'DBInstances[0].Endpoint.Address' \
+    --output text)
+
+  $ echo "RDS endpoint: ${RDS_ENDPOINT}"
+  RDS endpoint: rds-eksworkshop.<xxxxxxxxx>.ap-northeast-1.rds.amazonaws.com
+  ```
+- Get into the EC2 jumpbox and create some content in the DB
+  ```sh
+  $ mysql -h rds-eksworkshop.<xxxxxxxxx>.ap-northeast-1.rds.amazonaws.com --port 3306 -u admin -ppassword test_db
+  ```
+  ```sql
+  MySQL [test_db]> show databases;
+  +--------------------+
+  | Database           |
+  +--------------------+
+  | information_schema |
+  | mysql              |
+  | performance_schema |
+  | sys                |
+  | test_db            |
+  +--------------------+
+
+  MySQL [test_db]> create table test_table ( id smallint unsigned not null auto_increment, name varchar(20) not null, constraint pk_example primary key (id) );
+
+  MySQL [test_db]> insert into test_table (id, name) values (null, 'Sample data');
+  Query OK, 1 row affected (0.01 sec)
+
+  MySQL [test_db]> select * from test_table;
+  +----+-------------+
+  | id | name        |
+  +----+-------------+
+  |  1 | Sample data |
+  +----+-------------+
+  1 row in set (0.00 sec)
+  ```
+### CNI (Container Network Interface)
+The CNI plugin for k8s assigns an IP address (a secondary ENI in the node instance) from the VPC to each pod. It is deployed with each of EC2 node in a Daemonset with the name `aws-node`. https://docs.aws.amazon.com/eks/latest/userguide/pod-networking.html
+
+Since SG is specified with network interfaces, we are now able to schedule pods requiring specific security groups.
+
+- Add IAM policy to the node group role to allow the EC2 instances to manage network interfaces, their private IP addresses, and attachment and detachment of them.
+  `AmazonEKS_CNI_Policy` seems to be already attached to the node group's IAM role
+- enable CNI plugin by setting env `ENABLE_POD_ENI=true` in the aws-node `DaemonSet`
+  ```sh
+  $ kubectl -n kube-system set env daemonset aws-node ENABLE_POD_ENI=true
+  # wait for the rolling update of the daemonset
+  $ kubectl -n kube-system rollout status ds aws-node
+  ```
+- The plugin will then add a label `vpc.amazonaws.com/has-trunk-attached=true` to compatible instances
+  ```sh
+  $ kubectl get nodes \
+    --selector alpha.eksctl.io/nodegroup-name=nodegroup-sec-group \
+    --show-labels
+  ```
+### SG for pods
+- verify that the cluster has the security group policies CRD (Custom Resource Definition)
+  ```sh
+  $ kubectl get crd
+  NAME                                         CREATED AT
+  eniconfigs.crd.k8s.amazonaws.com             2021-08-11T09:56:07Z
+  securitygrouppolicies.vpcresources.k8s.aws   2021-08-11T09:56:11Z
+  ```
+- create pod sg policy
+  This policy will attach the POD_SG to pods who have the label `app: green-pod`
+  ```yaml
+  # sg-policy.yaml
+  apiVersion: vpcresources.k8s.aws/v1beta1
+  kind: SecurityGroupPolicy
+  metadata:
+    name: allow-rds-access
+  spec:
+    podSelector:
+      matchLabels:
+        app: green-pod
+    securityGroups:
+      groupIds:
+        - sg-05ef575e7b2519455 # $POD_SG
+  ```
+- create a namespace `sg-per-pod` and deploy the policy in that namespace
+  ```sh
+  # create a namespace
+  $ kubectl create namespace sg-per-pod
+  namespace/sg-per-pod created
+
+  # deploy the policy in that namespace
+  $ kubectl -n sg-per-pod apply -f sg-policy.yaml
+  securitygrouppolicy.vpcresources.k8s.aws/allow-rds-access created
+
+  # describe the policy
+  $ kubectl -n sg-per-pod describe securitygrouppolicy
+  ```
+  This should be in the output
+  ```
+  Spec:
+    Pod Selector:
+      Match Labels:
+        App:  green-pod
+    Security Groups:
+      Group Ids:
+        sg-05ef575e7b2519455
+  ```
+
+### store RDS credentials in a k8s secret
+```sh
+$ export RDS_PASSWORD=password
+$ export RDS_ENDPOINT=$(aws rds describe-db-instances \
+    --db-instance-identifier rds-eksworkshop \
+    --query 'DBInstances[0].Endpoint.Address' \
+    --output text)
+
+$ kubectl create secret generic rds \
+    --namespace=sg-per-pod \
+    --from-literal="password=${RDS_PASSWORD}" \
+    --from-literal="host=${RDS_ENDPOINT}"
+secret/rds created
+```
+Verify:
+```sh
+$ kubectl -n sg-per-pod describe secret rds
+Name:         rds
+Namespace:    sg-per-pod
+Labels:       <none>
+Annotations:  <none>
+
+Type:  Opaque
+
+Data
+====
+host:      61 bytes
+password:  8 bytes
+```
+### deploy pods
+#### green-pods
+- Create the green-pod deployment yaml based on the `sa-web-app-deployment.yaml`
+  - update relevant sections
+    ```yaml
+    # sa-web-app-green-pod-deployment.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: green-pod
+      labels:
+        app: green-pod
+      namespace: sg-per-pod
+    spec:
+      selector:
+        matchLabels:
+          app: green-pod
+      ...
+      template:
+        metadata:
+          labels:
+            app: green-pod
+        spec:
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                - matchExpressions:
+                  - key: "vpc.amazonaws.com/has-trunk-attached"
+                    operator: In
+                    values:
+                      - "true"
+          containers:
+            - image: alabebop/sentiment-analysis-webapp-multistage
+              imagePullPolicy: Always
+              name: green-pod
+              env:
+                ...
+                # DB related
+                - name: HOST
+                  valueFrom:
+                    secretKeyRef:
+                      name: rds
+                      key: host
+                - name: DBNAME
+                  value: test_db
+                - name: USER
+                  value: admin
+                - name: PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: rds
+                      key: password
+      ```
+- deploy it to the `sg-per-pod` namespace
+  ```sh
+  $ kubectl -n sg-per-pod apply -f sa-web-app-green-pod-deployment.yaml
+  ```
+  ```sh
+  $ kubectl -n sg-per-pod get pods
+  NAME                         READY   STATUS    RESTARTS   AGE
+  green-pod-7895c5dfc6-qqbrf   1/1     Running   0          7m59s
+  ```
+
+- get a shell of the pod and verify RDS access
+  ```sh
+  $ kubectl -n sg-per-pod exec -it green-pod-7895c5dfc6-qqbrf -- /bin/bash
+  ```
+  - verify ENVs set in the deployment
+    ```
+    bash-5.1# echo $USER
+    admin
+    bash-5.1# echo $DBNAME
+    test_db
+    ```
+  - verify RDS read and write access
+    ```
+    bash-5.1# mysql -h ${HOST} --port 3306 -u ${USER} -p${PASSWORD} ${DB_NAME}
+    
+    MySQL [test_db]> insert into test_table (id, name) values (null, 'from EKS');
+
+    MySQL [test_db]> select * from test_table;
+    +----+-------------+
+    | id | name        |
+    +----+-------------+
+    |  1 | Sample data |
+    |  2 | from EKS    |
+    +----+-------------+
+    ```
+#### red-pods
+- Do the same as green-pod but replace `green-pod` with `red-pod` and deploy a red pod in the same namespace.
+
+  ```sh
+  $ kubectl -n sg-per-pod apply -f sa-web-app-red-pod-deployment.yaml
+  ```
+- get the red pod
+  ```sh
+  $ kubectl -n sg-per-pod get pods
+  NAME                         READY   STATUS    RESTARTS   AGE
+  green-pod-7895c5dfc6-qqbrf   1/1     Running   0          25m
+  red-pod-975c49d4d-f6k6n      1/1     Running   0          36s
+  ```
+- get a shell in the red pod and verify it has the same config but doesn't have access to RDS
+  ```sh
+  $ kubectl -n sg-per-pod exec -it red-pod-975c49d4d-f6k6n -- /bin/bash
+  ```
+  ```
+  bash-5.1# echo $HOST
+  <this works>
+  bash-5.1# mysql -h ${HOST} --port 3306 -u ${USER} -p${PASSWORD} ${DB_NAME}
+  ERROR 2002 (HY000): Can't connect to MySQL server on 'rds-eksworkshop.<xxxxxxxxxx>.ap-northeast-1.rds.amazonaws.com' (115)
+  <this does not work, timeout>
+  ```

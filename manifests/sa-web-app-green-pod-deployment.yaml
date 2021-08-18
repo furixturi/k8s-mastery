@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: green-pod
+  labels:
+    app: green-pod
+  namespace: sg-per-pod
+spec:
+  selector:
+    matchLabels:
+      app: green-pod
+  replicas: 1
+  minReadySeconds: 15
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: 
+      maxUnavailable: 1
+      maxSurge: 1 
+  template:
+    metadata:
+      labels:
+        app: green-pod
+    spec:
+      affinity:
+       nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: "vpc.amazonaws.com/has-trunk-attached"
+              operator: In
+              values:
+                - "true"
+      containers:
+      - image: alabebop/sentiment-analysis-webapp-multistage
+        imagePullPolicy: Always
+        name: green-pod
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "500m"
+          limits:
+            memory: "512Mi"
+            cpu: "1024m"
+        env:
+          - name: SA_LOGIC_URL
+            value: "http://sa-logic"
+            # value: "http://10.108.232.130"
+          - name: SA_LOGIC_PORT
+            value: "80"
+          - name: SA_WEBAPP_PORT
+            value: "8080"
+          # DB related
+          - name: HOST
+            valueFrom:
+              secretKeyRef:
+                name: rds
+                key: host
+          - name: DBNAME
+            value: test_db
+          - name: USER
+            value: admin
+          - name: PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: rds
+                key: password
+        ports:
+          - containerPort: 8080
